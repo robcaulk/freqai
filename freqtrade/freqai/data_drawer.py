@@ -170,7 +170,7 @@ class FreqaiDataDrawer:
         # send pair to end of queue
         self.pair_dict[pair]["priority"] = len(self.pair_dict)
 
-    def set_initial_return_values(self, pair: str, dk, pred_df, do_preds) -> None:
+    def set_initial_return_values(self, pair: str, dk, pred_df, do_preds, classify=False) -> None:
         """
         Set the initial return values to a persistent dataframe. This avoids needing to repredict on
         historical candles, and also stores historical predictions despite retrainings (so stored
@@ -179,15 +179,17 @@ class FreqaiDataDrawer:
         self.model_return_values[pair] = pd.DataFrame()
         for label in dk.label_list:
             self.model_return_values[pair][label] = pred_df[label]
-            self.model_return_values[pair][f"{label}_mean"] = dk.data["labels_mean"][label]
-            self.model_return_values[pair][f"{label}_std"] = dk.data["labels_std"][label]
+            if not classify:
+                self.model_return_values[pair][f"{label}_mean"] = dk.data["labels_mean"][label]
+                self.model_return_values[pair][f"{label}_std"] = dk.data["labels_std"][label]
 
         if self.freqai_info.get("feature_parameters", {}).get("DI_threshold", 0) > 0:
             self.model_return_values[pair]["DI_values"] = dk.DI_values
 
         self.model_return_values[pair]["do_predict"] = do_preds
 
-    def append_model_predictions(self, pair: str, predictions, do_preds, dk, len_df) -> None:
+    def append_model_predictions(self, pair: str, predictions, do_preds, dk, len_df,
+                                 classify=False) -> None:
 
         # strat seems to feed us variable sized dataframes - and since we are trying to build our
         # own return array in the same shape, we need to figure out how the size has changed
@@ -204,8 +206,9 @@ class FreqaiDataDrawer:
 
         for label in dk.label_list:
             df[label].iloc[-1] = predictions[label].iloc[-1]
-            df[f"{label}_mean"].iloc[-1] = dk.data["labels_mean"][label]
-            df[f"{label}_std"].iloc[-1] = dk.data["labels_std"][label]
+            if not classify:
+                df[f"{label}_mean"].iloc[-1] = dk.data["labels_mean"][label]
+                df[f"{label}_std"].iloc[-1] = dk.data["labels_std"][label]
         # df['prediction'].iloc[-1] = predictions[-1]
         df["do_predict"].iloc[-1] = do_preds[-1]
 

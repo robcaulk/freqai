@@ -10,7 +10,8 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-from joblib import dump, load  # , Parallel, delayed # used for auto distribution assignment
+import scipy as spy
+from joblib import dump, load  # Parallel, delayed  # used for auto distribution assignment
 from pandas import DataFrame
 from sklearn import linear_model
 from sklearn.metrics.pairwise import pairwise_distances
@@ -263,7 +264,6 @@ class FreqaiDataKitchen:
             labels,
             weights,
             stratify=stratification,
-            # shuffle=False,
             **self.config["freqai"]["data_split_parameters"],
         )
 
@@ -276,7 +276,6 @@ class FreqaiDataKitchen:
         unfiltered_dataframe: DataFrame,
         training_feature_list: List,
         label_list: List = list(),
-        # labels: DataFrame = pd.DataFrame(),
         training_filter: bool = True,
     ) -> Tuple[DataFrame, DataFrame]:
         """
@@ -661,6 +660,8 @@ class FreqaiDataKitchen:
 
         self.training_features_list = features
         self.label_list = labels
+        if self.freqai_config.get('classifier', False):
+            self.class_label_list = dataframe[labels[0]].unique()
         # return features, labels
 
     def check_if_pred_in_training_spaces(self) -> None:
@@ -1139,7 +1140,6 @@ class FreqaiDataKitchen:
         """
         Fit the labels with a gaussian distribution
         """
-        import scipy as spy
 
         self.data["labels_mean"], self.data["labels_std"] = {}, {}
         for label in self.label_list:

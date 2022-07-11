@@ -177,10 +177,16 @@ class FreqaiDataDrawer:
         predictions are true predictions, not just inferencing on trained data)
         """
         self.model_return_values[pair] = pd.DataFrame()
-        for label in dk.label_list:
+        if self.freqai_info.get('classifier', False):
+            label_list = dk.class_label_list
+        else:
+            label_list = dk.label_list
+
+        for label in label_list:
             self.model_return_values[pair][label] = pred_df[label]
-            self.model_return_values[pair][f"{label}_mean"] = dk.data["labels_mean"][label]
-            self.model_return_values[pair][f"{label}_std"] = dk.data["labels_std"][label]
+            if not self.freqai_info.get('classifier', False):
+                self.model_return_values[pair][f"{label}_mean"] = dk.data["labels_mean"][label]
+                self.model_return_values[pair][f"{label}_std"] = dk.data["labels_std"][label]
 
         if self.freqai_info.get("feature_parameters", {}).get("DI_threshold", 0) > 0:
             self.model_return_values[pair]["DI_values"] = dk.DI_values
@@ -202,10 +208,16 @@ class FreqaiDataDrawer:
 
         df = self.model_return_values[pair] = self.model_return_values[pair].shift(-i)
 
-        for label in dk.label_list:
+        if self.freqai_info.get('classifier', False):
+            label_list = dk.class_label_list
+        else:
+            label_list = dk.label_list
+
+        for label in label_list:
             df[label].iloc[-1] = predictions[label].iloc[-1]
-            df[f"{label}_mean"].iloc[-1] = dk.data["labels_mean"][label]
-            df[f"{label}_std"].iloc[-1] = dk.data["labels_std"][label]
+            if not self.freqai_info.get('classifier', False):
+                df[f"{label}_mean"].iloc[-1] = dk.data["labels_mean"][label]
+                df[f"{label}_std"].iloc[-1] = dk.data["labels_std"][label]
         # df['prediction'].iloc[-1] = predictions[-1]
         df["do_predict"].iloc[-1] = do_preds[-1]
 
@@ -237,8 +249,11 @@ class FreqaiDataDrawer:
         """
 
         dk.find_features(dataframe)
-
-        for label in dk.label_list:
+        if self.freqai_info.get('classifier', False):
+            label_list = dk.class_label_list
+        else:
+            label_list = dk.label_list
+        for label in label_list:
             dataframe[label] = 0
             dataframe[f"{label}_mean"] = 0
             dataframe[f"{label}_std"] = 0

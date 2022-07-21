@@ -208,13 +208,20 @@ class FreqaiDataDrawer:
         historical candles, and also stores historical predictions despite retrainings (so stored
         predictions are true predictions, not just inferencing on trained data)
         """
+
         # dynamic df returned to strategy and plotted in frequi
         mrv_df = self.model_return_values[pair] = pd.DataFrame()
 
-        for label in dk.label_list:
+        if self.freqai_info.get('classifier', False):
+            label_list = dk.class_label_list
+        else:
+            label_list = dk.label_list
+
+        for label in label_list:
             mrv_df[label] = pred_df[label]
-            mrv_df[f"{label}_mean"] = dk.data["labels_mean"][label]
-            mrv_df[f"{label}_std"] = dk.data["labels_std"][label]
+            if not self.freqai_info.get('classifier', False):
+                mrv_df[f"{label}_mean"] = dk.data["labels_mean"][label]
+                mrv_df[f"{label}_std"] = dk.data["labels_std"][label]
 
         if self.freqai_info.get("feature_parameters", {}).get("DI_threshold", 0) > 0:
             mrv_df["DI_values"] = dk.DI_values
@@ -236,6 +243,11 @@ class FreqaiDataDrawer:
 
         df = self.model_return_values[pair] = self.model_return_values[pair].shift(-i)
 
+        if self.freqai_info.get('classifier', False):
+            label_list = dk.class_label_list
+        else:
+            label_list = dk.label_list
+
         if pair in self.historic_predictions:
             hp_df = self.historic_predictions[pair]
             # here are some pandas hula hoops to accommodate the possibility of a series
@@ -244,11 +256,12 @@ class FreqaiDataDrawer:
             hp_df = pd.concat([hp_df, nan_df], ignore_index=True, axis=0)
             self.historic_predictions[pair] = hp_df[:-1]
 
-        for label in dk.label_list:
+        for label in label_list:
             df[label].iloc[-1] = predictions[label].iloc[-1]
-            df[f"{label}_mean"].iloc[-1] = dk.data["labels_mean"][label]
-            df[f"{label}_std"].iloc[-1] = dk.data["labels_std"][label]
-        # df['prediction'].iloc[-1] = predictions[-1]
+            if not self.freqai_info.get('classifier', False):
+                df[f"{label}_mean"].iloc[-1] = dk.data["labels_mean"][label]
+                df[f"{label}_std"].iloc[-1] = dk.data["labels_std"][label]
+
         df["do_predict"].iloc[-1] = do_preds[-1]
 
         if self.freqai_info.get("feature_parameters", {}).get("DI_threshold", 0) > 0:
@@ -283,8 +296,11 @@ class FreqaiDataDrawer:
         """
 
         dk.find_features(dataframe)
-
-        for label in dk.label_list:
+        if self.freqai_info.get('classifier', False):
+            label_list = dk.class_label_list
+        else:
+            label_list = dk.label_list
+        for label in label_list:
             dataframe[label] = 0
             dataframe[f"{label}_mean"] = 0
             dataframe[f"{label}_std"] = 0

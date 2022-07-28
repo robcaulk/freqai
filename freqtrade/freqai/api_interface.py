@@ -4,6 +4,8 @@ import pandas as pd
 from freqtrade.freqai.data_drawer import FreqaiDataDrawer
 import numpy as np
 from typing import Callable
+import datetime
+import dateutil.parser
 
 
 class FreqaiAPI:
@@ -53,13 +55,19 @@ class FreqaiAPI:
         else:
             requests.request("PATCH", get_url, json=payload, headers=self.headers)
 
-    def fetch_prediction_from_api(self, pair: str) -> dict:
+    def fetch_prediction_from_api(self, pair: str, candle_date: datetime.datetime) -> dict:
         subpair = pair.split('/')
         pair = f"{subpair[0]}{subpair[1]}"
 
         get_url = f"{self.post_url}/{pair}"
 
-        return requests.request("GET", get_url, headers=self.headers).json()['data']
+        ts_api = 10000.
+        ts_candle = candle_date.timestamp()
+        while ts_api < ts_candle:
+            response = requests.request("GET", get_url, headers=self.headers).json()['data']
+            ts_api = dateutil.parser.parse(response['updatedAt']).timestamp()
+
+        return response
 
     def start_fetching_from_api(self, dataframe: DataFrame, pair: str) -> None:
         """
@@ -67,7 +75,8 @@ class FreqaiAPI:
         values based on the first fetched prediction. Afterwards, it will append
         single predictions to the return dataframe.
         """
-        response_dict = self.fetch_prediction_from_api(pair)
+        candle_date = dataframe['date'].iloc[-1]
+        response_dict = self.fetch_prediction_from_api(pair, candle_date)
 
         if pair not in self.dd.model_return_values:
             self.set_initial_return_values(pair, response_dict, len(dataframe.index))

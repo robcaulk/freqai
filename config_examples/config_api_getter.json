@@ -30,9 +30,19 @@
         "pair_whitelist": [
             "1INCH/USDT",
             "AAVE/USDT",
+            "ADA/USDT",
             "BTC/USDT",
             "ETH/USDT",
-            "ADA/USDT"
+            "DOT/USDT",
+            "LINK/USDT",
+            "DOGE/USDT",
+            "SOL/USDT",
+            "MATIC/USDT",
+            "EGLD/USDT",
+            "XLM/USDT",
+            "XRP/USDT",
+            "XMR/USDT",
+            "ZEC/USDT"
         ],
         "pair_blacklist": []
     },

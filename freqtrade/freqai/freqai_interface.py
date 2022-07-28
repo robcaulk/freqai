@@ -19,7 +19,7 @@ from freqtrade.exceptions import OperationalException
 from freqtrade.freqai.data_drawer import FreqaiDataDrawer
 from freqtrade.freqai.data_kitchen import FreqaiDataKitchen
 from freqtrade.strategy.interface import IStrategy
-
+from freqtrade.freqai.api_interface import FreqaiAPI
 
 pd.options.mode.chained_assignment = None
 logger = logging.getLogger(__name__)
@@ -83,6 +83,10 @@ class IFreqaiModel(ABC):
         self.last_trade_database_summary: DataFrame = {}
         self.current_trade_database_summary: DataFrame = {}
 
+        if self.freqai_info.get('freqai_api_url', None):
+            self.api = FreqaiAPI(config, self.dd, self.create_api_payload)
+            self.api_mode = self.freqai_info.get('freqai_api_mode', 'getter')
+
     def assert_config(self, config: Dict[str, Any]) -> None:
 
         if not config.get("freqai", {}):
@@ -101,6 +105,13 @@ class IFreqaiModel(ABC):
         """
 
         self.live = strategy.dp.runmode in (RunMode.DRY_RUN, RunMode.LIVE)
+
+        if self.live and self.api_mode == 'getter':
+            self.api.start_fetching_from_api(dataframe, metadata["pair"])
+            dataframe = self.dd.attach_return_values_to_return_dataframe(
+                metadata["pair"], dataframe)
+            return dataframe
+
         self.dd.set_pair_dict_info(metadata)
 
         if self.live:
@@ -123,6 +134,10 @@ class IFreqaiModel(ABC):
 
         dataframe = dk.remove_features_from_df(dk.return_dataframe)
         del dk
+
+        if self.live and self.api_mode == "poster":
+            self.api.post_predictions(dataframe, metadata["pair"])
+
         return self.return_values(dataframe)
 
     @threaded
@@ -623,3 +638,12 @@ class IFreqaiModel(ABC):
         dk.data['extra_returns_per_train']['total_profit'] = total_profit
 
         return
+
+    def create_api_payload(self, dataframe: DataFrame, pair: str) -> dict:
+        """
+        Create the payload (schema) for posting to user set API
+        """
+
+        payload: Dict[Any, Any] = {}
+
+        return payload

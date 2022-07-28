@@ -51,7 +51,7 @@ class FreqaiAPI:
         if response.json()['data'] is None:
             requests.request("POST", self.post_url, json=payload, headers=self.headers)
         else:
-            requests.request("PATCH", self.post_url, json=payload, headers=self.headers)
+            requests.request("PATCH", get_url, json=payload, headers=self.headers)
 
     def fetch_prediction_from_api(self, pair: str) -> dict:
         subpair = pair.split('/')

@@ -1,0 +1,85 @@
+{
+    "trading_mode": "futures",
+    "new_pairs_days": 30,
+    "margin_mode": "isolated",
+    "max_open_trades": 8,
+    "stake_currency": "USDT",
+    "stake_amount": 1000,
+    "tradable_balance_ratio": 1,
+    "fiat_display_currency": "USD",
+    "dry_run": true,
+    "timeframe": "3m",
+    "dataformat_ohlcv": "json",
+    "dry_run_wallet": 12000,
+    "cancel_open_orders_on_exit": true,
+    "unfilledtimeout": {
+        "entry": 10,
+        "exit": 30
+    },
+    "exchange": {
+        "name": "binance",
+        "key": "",
+        "secret": "",
+        "ccxt_config": {
+            "enableRateLimit": true
+        },
+        "ccxt_async_config": {
+            "enableRateLimit": true,
+            "rateLimit": 200
+        },
+        "pair_whitelist": [
+            "1INCH/USDT",
+            "AAVE/USDT",
+            "BTC/USDT",
+            "ETH/USDT",
+            "ADA/USDT"
+        ],
+        "pair_blacklist": []
+    },
+    "entry_pricing": {
+        "price_side": "same",
+        "purge_old_models": true,
+        "use_order_book": true,
+        "order_book_top": 1,
+        "price_last_balance": 0.0,
+        "check_depth_of_market": {
+            "enabled": false,
+            "bids_to_ask_delta": 1
+        }
+    },
+    "exit_pricing": {
+        "price_side": "other",
+        "use_order_book": true,
+        "order_book_top": 1
+    },
+    "pairlists": [
+        {
+            "method": "StaticPairList"
+        }
+    ],
+    "freqai": {
+        "identifier": "getter_test1",
+        "train_period_days": 0,
+        "backtest_period_days": 0,
+        "feature_parameters": {
+            "include_corr_pairlist": [
+            ],
+            "include_timeframes": [
+            ]
+        },
+        "data_split_parameters": {
+        },
+        "model_training_parameters": {
+        },
+        "freqai_api_token": "",
+        "freqai_api_url": "https://freq-ai-0h2ff8.can.canonic.dev/api/",
+        "freqai_api_mode": "getter"
+    },
+    "bot_name": "getter",
+    "force_entry_enable": true,
+    "initial_state": "running",
+    "internals": {
+        "process_throttle_secs": 5
+    }
+}
+

@@ -21,7 +21,7 @@ from freqtrade.exchange import timeframe_to_seconds
 from freqtrade.freqai.data_drawer import FreqaiDataDrawer
 from freqtrade.freqai.data_kitchen import FreqaiDataKitchen
 from freqtrade.strategy.interface import IStrategy
-
+from freqtrade.freqai.api_interface import FreqaiAPI
 
 pd.options.mode.chained_assignment = None
 logger = logging.getLogger(__name__)
@@ -91,6 +91,10 @@ class IFreqaiModel(ABC):
         self.begin_time_train: float = 0
         self.base_tf_seconds = timeframe_to_seconds(self.config['timeframe'])
 
+        if self.freqai_info.get('freqai_api_url', None):
+            self.api = FreqaiAPI(config, self.dd, self.create_api_payload)
+            self.api_mode = self.freqai_info.get('freqai_api_mode', 'getter')
+
     def assert_config(self, config: Dict[str, Any]) -> None:
 
         if not config.get("freqai", {}):
@@ -109,6 +113,13 @@ class IFreqaiModel(ABC):
         """
 
         self.live = strategy.dp.runmode in (RunMode.DRY_RUN, RunMode.LIVE)
+
+        if self.live and self.api_mode == 'getter':
+            self.api.start_fetching_from_api(dataframe, metadata["pair"])
+            dataframe = self.dd.attach_return_values_to_return_dataframe(
+                metadata["pair"], dataframe)
+            return dataframe
+
         self.dd.set_pair_dict_info(metadata)
 
         if self.live:
@@ -682,3 +693,12 @@ class IFreqaiModel(ABC):
         :do_predict: np.array of 1s and 0s to indicate places where freqai needed to remove
         data (NaNs) or felt uncertain about data (i.e. SVM and/or DI index)
         """
+
+    def create_api_payload(self, dataframe: DataFrame, pair: str) -> dict:
+        """
+        Create the payload (schema) for posting to user set API
+        """
+
+        payload: Dict[Any, Any] = {}
+
+        return payload

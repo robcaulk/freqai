@@ -588,6 +588,8 @@ class FreqaiDataKitchen:
 
         self.training_features_list = features
         self.label_list = labels
+        if self.freqai_config.get('classifier', False):
+            self.class_label_list = dataframe[labels[0]].unique()
         # return features, labels
 
     def check_if_pred_in_training_spaces(self) -> None:

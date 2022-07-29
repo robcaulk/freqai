@@ -6,6 +6,7 @@ import numpy as np
 from typing import Callable
 import datetime
 import dateutil.parser
+import time
 
 
 class FreqaiAPI:
@@ -64,6 +65,7 @@ class FreqaiAPI:
         ts_api = 10000.
         ts_candle = candle_date.timestamp()
         while ts_api < ts_candle:
+            time.sleep(5)
             response = requests.request("GET", get_url, headers=self.headers).json()['data']
             ts_api = dateutil.parser.parse(response['updatedAt']).timestamp()
 

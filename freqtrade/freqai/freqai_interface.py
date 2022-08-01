@@ -7,22 +7,23 @@ import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Tuple
-
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 from pandas import DataFrame
-
+# from timer import timer
 from freqtrade.configuration import TimeRange
 from freqtrade.enums import RunMode
 from freqtrade.exceptions import OperationalException
+from freqtrade.freqai.api_interface import FreqaiAPI
 from freqtrade.freqai.data_drawer import FreqaiDataDrawer
 from freqtrade.freqai.data_kitchen import FreqaiDataKitchen
 from freqtrade.strategy.interface import IStrategy
-from freqtrade.freqai.api_interface import FreqaiAPI
+
 
 pd.options.mode.chained_assignment = None
 logger = logging.getLogger(__name__)
+# timer.set_level(logging.INFO)
 
 
 def threaded(fn):
@@ -106,12 +107,6 @@ class IFreqaiModel(ABC):
 
         self.live = strategy.dp.runmode in (RunMode.DRY_RUN, RunMode.LIVE)
 
-        if self.live and self.api_mode == 'getter':
-            self.api.start_fetching_from_api(dataframe, metadata["pair"])
-            dataframe = self.dd.attach_return_values_to_return_dataframe(
-                metadata["pair"], dataframe)
-            return dataframe
-
         self.dd.set_pair_dict_info(metadata)
 
         if self.live:
@@ -134,9 +129,6 @@ class IFreqaiModel(ABC):
 
         dataframe = dk.remove_features_from_df(dk.return_dataframe)
         del dk
-
-        if self.live and self.api_mode == "poster":
-            self.api.post_predictions(dataframe, metadata["pair"])
 
         return self.return_values(dataframe)
 
@@ -571,6 +563,23 @@ class IFreqaiModel(ABC):
 
         return
 
+    def fetch_predictions_for_getter(self, dataframe: DataFrame, metadata: dict):
+        # getter instance enters and exits here
+        if self.api_mode == 'getter':
+            dataframe = self.api.start_fetching_from_api(dataframe, metadata["pair"])
+            return dataframe
+        else:
+            logger.error('Strategy trying to get predictions from API, but not set to '
+                         'getter. Set freqai_api_mode to getter in config')
+
+    # @timer('function name', 's')
+    def post_predictions(self, dataframe: DataFrame, metadata: dict) -> None:
+
+        if self.live and self.api_mode == "poster":
+            self.api.post_predictions(dataframe, metadata["pair"])
+        else:
+            logger.error('Strategy trying to post predictions to DB, but not set to '
+                         'poster. Set freqai_api_mode to poster in config')
     # Following methods which are overridden by user made prediction models.
     # See freqai/prediction_models/CatboostPredictionModlel.py for an example.
 

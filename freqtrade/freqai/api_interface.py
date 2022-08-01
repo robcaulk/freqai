@@ -65,14 +65,15 @@ class FreqaiAPI:
 
         get_url = f"{self.post_url}/{pair}"
 
-        if self.num_posts < self.config['exchange']['pair_whitelist']:
-            response = requests.request("GET", get_url, headers=self.headers)
-            self.num_posts += 1
-
         payload = self.create_api_payload(dataframe, pair)
 
-        if response.json()['data'] is None:
-            requests.request("POST", self.post_url, json=payload, headers=self.headers)
+        if self.num_posts < len(self.config['exchange']['pair_whitelist']):
+            response = requests.request("GET", get_url, headers=self.headers)
+            self.num_posts += 1
+            if response.json()['data'] is None:
+                requests.request("POST", self.post_url, json=payload, headers=self.headers)
+            else:
+                requests.request("PATCH", get_url, json=payload, headers=self.headers)
         else:
             requests.request("PATCH", get_url, json=payload, headers=self.headers)
 

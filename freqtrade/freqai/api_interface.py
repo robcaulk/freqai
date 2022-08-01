@@ -1,12 +1,18 @@
+import logging
+import time
+from typing import Any, Callable, Dict
+
+# import datetime
+import dateutil.parser
+import numpy as np
+import pandas as pd
 import requests
 from pandas import DataFrame
-import pandas as pd
+
 from freqtrade.freqai.data_drawer import FreqaiDataDrawer
-import numpy as np
-from typing import Callable
-import datetime
-import dateutil.parser
-import time
+
+
+logger = logging.getLogger(__name__)
 
 
 class FreqaiAPI:
@@ -19,6 +25,7 @@ class FreqaiAPI:
     :param: payload_fun: Callable = User defined schema for the "poster" FreqAI instance.
     Defined in the IFreqaiModel (inherited prediction model class such as CatboostPredictionModel)
     """
+
     def __init__(self, config: dict, data_drawer: FreqaiDataDrawer, payload_func: Callable):
 
         self.config = config
@@ -32,6 +39,17 @@ class FreqaiAPI:
             "Authorization": self.api_token,
             "Content-Type": "application/json"
         }
+        self.api_dict: Dict[str, Any] = {}
+        self.num_posts = 0
+
+    def start_fetching_from_api(self, dataframe: DataFrame, pair: str) -> DataFrame:
+
+        fetch_new = self.check_if_new_fetch_required(dataframe, pair)
+        if fetch_new:
+            response = self.fetch_all_pairs_from_api(dataframe)
+            self.parse_response(response)
+        self.make_return_dataframe(dataframe, pair)
+        return self.dd.attach_return_values_to_return_dataframe(pair, dataframe)
 
     def post_predictions(self, dataframe: DataFrame, pair: str) -> None:
         """
@@ -47,7 +65,9 @@ class FreqaiAPI:
 
         get_url = f"{self.post_url}/{pair}"
 
-        response = requests.request("GET", get_url, headers=self.headers)
+        if self.num_posts < self.config['exchange']['pair_whitelist']:
+            response = requests.request("GET", get_url, headers=self.headers)
+            self.num_posts += 1
 
         payload = self.create_api_payload(dataframe, pair)
 
@@ -56,17 +76,34 @@ class FreqaiAPI:
         else:
             requests.request("PATCH", get_url, json=payload, headers=self.headers)
 
-    def fetch_prediction_from_api(self, pair: str, candle_date: datetime.datetime) -> dict:
-        subpair = pair.split('/')
-        pair = f"{subpair[0]}{subpair[1]}"
+    def check_if_new_fetch_required(self, dataframe: DataFrame, pair: str) -> bool:
 
-        get_url = f"{self.post_url}/{pair}"
+        if not self.api_dict:
+            return True
+
+        subpair = pair.split('/')
+        coin = f"{subpair[0]}{subpair[1]}"
+        candle_date = dataframe['date'].iloc[-1]
+        ts_candle = candle_date.timestamp()
+        ts_dict = dateutil.parser.parse(self.api_dict[coin]['updatedAt']).timestamp()
+
+        if ts_dict < ts_candle:
+            logger.info('Local dictionary outdated, fetching new predictions from API')
+            return True
+        else:
+            # logger.info('Local dict up to date, using local prediction.')
+            return False
+
+    def fetch_all_pairs_from_api(self, dataframe: DataFrame) -> dict:
+
+        candle_date = dataframe['date'].iloc[-1]
+        get_url = f"{self.post_url}"
 
         ts_api = 10000.
         ts_candle = candle_date.timestamp()
         while ts_api < ts_candle:
             response = requests.request("GET", get_url, headers=self.headers).json()['data']
-            ts_api = dateutil.parser.parse(response['updatedAt']).timestamp()
+            ts_api = dateutil.parser.parse(response[0]['updatedAt']).timestamp()
             if ts_api < ts_candle:
                 time.sleep(5)
             else:
@@ -74,19 +111,23 @@ class FreqaiAPI:
 
         return response
 
-    def start_fetching_from_api(self, dataframe: DataFrame, pair: str) -> None:
-        """
-        FreqAI "getter" instance will first create a full dataframe of constant
-        values based on the first fetched prediction. Afterwards, it will append
-        single predictions to the return dataframe.
-        """
-        candle_date = dataframe['date'].iloc[-1]
-        response_dict = self.fetch_prediction_from_api(pair, candle_date)
+    def parse_response(self, response_dict: dict) -> None:
+
+        for coin_pred in response_dict:
+            coin = coin_pred['name']
+            self.api_dict[coin] = coin_pred   # {}
+            # for return_str in coin_pred['returns']:
+            #     coin_dict[coin][return_str] = coin_pred[return_str]
+
+    def make_return_dataframe(self, dataframe: DataFrame, pair: str) -> None:
+
+        subpair = pair.split('/')
+        coin = f"{subpair[0]}{subpair[1]}"
 
         if pair not in self.dd.model_return_values:
-            self.set_initial_return_values(pair, response_dict, len(dataframe.index))
+            self.set_initial_return_values(pair, self.api_dict[coin], len(dataframe.index))
         else:
-            self.append_model_predictions_from_api(pair, response_dict, len(dataframe.index))
+            self.append_model_predictions_from_api(pair, self.api_dict[coin], len(dataframe.index))
 
     def set_initial_return_values(self, pair: str, response_dict: dict, len_df: int) -> None:
         """

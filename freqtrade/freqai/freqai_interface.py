@@ -85,8 +85,8 @@ class IFreqaiModel(ABC):
         self.current_trade_database_summary: DataFrame = {}
 
         if self.freqai_info.get('freqai_api_url', None):
-            self.api = FreqaiAPI(config, self.dd, self.create_api_payload)
             self.api_mode = self.freqai_info.get('freqai_api_mode', 'getter')
+            self.api = FreqaiAPI(config, self.dd, self.create_api_payload, self.api_mode)
 
     def assert_config(self, config: Dict[str, Any]) -> None:
 
@@ -647,7 +647,7 @@ class IFreqaiModel(ABC):
         dk.data['extra_returns_per_train']['total_profit'] = total_profit
 
         return
-
+    
     def create_api_payload(self, dataframe: DataFrame, pair: str) -> dict:
         """
         Create the payload (schema) for posting to user set API

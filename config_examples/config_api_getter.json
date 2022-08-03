@@ -82,7 +82,7 @@
         "model_training_parameters": {
         },
         "freqai_api_token": "",
-        "freqai_api_url": "https://freq-ai-0h2ff8.can.canonic.dev/api/",
+        "freqai_api_url": "https://apis.blobr.app/w37eafeohk28gr9l/",
         "freqai_api_mode": "getter"
     },
     "bot_name": "getter",

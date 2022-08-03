@@ -93,8 +93,8 @@ class IFreqaiModel(ABC):
         self.base_tf_seconds = timeframe_to_seconds(self.config['timeframe'])
 
         if self.freqai_info.get('freqai_api_url', None):
-            self.api = FreqaiAPI(config, self.dd, self.create_api_payload)
             self.api_mode = self.freqai_info.get('freqai_api_mode', 'getter')
+            self.api = FreqaiAPI(config, self.dd, self.create_api_payload, self.api_mode)
 
     def assert_config(self, config: Dict[str, Any]) -> None:
 

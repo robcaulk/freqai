@@ -27,7 +27,8 @@ class FreqaiAPI:
     Defined in the IFreqaiModel (inherited prediction model class such as CatboostPredictionModel)
     """
 
-    def __init__(self, config: dict, data_drawer: FreqaiDataDrawer, payload_func: Callable, mode: str):
+    def __init__(self, config: dict, data_drawer: FreqaiDataDrawer,
+                 payload_func: Callable, mode: str):
 
         self.config = config
         self.freqai_config = config.get('freqai', {})
@@ -36,10 +37,16 @@ class FreqaiAPI:
         self.post_url = f"{self.api_base_url}pairs"
         self.dd = data_drawer
         self.create_api_payload = payload_func
-        self.headers = {
-            "Authorization": self.api_token,
-            "Content-Type": "application/json"
-        }
+        if mode == 'getter':
+            self.headers = {
+                "X-BLOBR-KEY": self.api_token,
+                "Content-Type": "application/json"
+            }
+        else:
+            self.headers = {
+                "Authorization": self.api_token,
+                "Content-Type": "application/json"
+            }
         self.api_dict: Dict[str, Any] = {}
         self.num_posts = 0
 

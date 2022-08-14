@@ -573,7 +573,24 @@ class DEnv(gym.Env):
 
         return np.clip(rw, 0, 1)
 
+    def profit_only_when_close_reward(self, action):
 
+        if self._last_trade_tick == None:
+            return 0.
+            
+        # close long
+        if (action == Actions.Short.value or action == Actions.Neutral.value) and self._position == Positions.Long:
+            last_trade_price = self.add_buy_fee(self.prices.iloc[self._last_trade_tick].open)
+            current_price = self.add_sell_fee(self.prices.iloc[self._current_tick].open)
+            return float(np.log(current_price) - np.log(last_trade_price))
+        
+        # close short
+        if (action == Actions.Long.value or action == Actions.Neutral.value) and self._position == Positions.Short:
+            last_trade_price = self.add_sell_fee(self.prices.iloc[self._last_trade_tick].open)
+            current_price = self.add_buy_fee(self.prices.iloc[self._current_tick].open)
+            return float(np.log(last_trade_price) - np.log(current_price))
+
+        return 0.
 
     def reward_rr_profit_config_v2(self, action):
         rw = 0.

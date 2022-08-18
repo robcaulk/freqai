@@ -130,12 +130,12 @@ class MyRLEnv(Base5ActionRLEnv):
                 return float((np.log(current_price) - np.log(last_trade_price)) * 2)
 
         # close short
-        if action == Actions.Short_buy.value and self._position == Positions.Short:
+        if action == Actions.Short_sell.value and self._position == Positions.Short:
             last_trade_price = self.add_sell_fee(self.prices.iloc[self._last_trade_tick].open)
             current_price = self.add_buy_fee(self.prices.iloc[self._current_tick].open)
             return float(np.log(last_trade_price) - np.log(current_price))
 
-        if action == Actions.Short_buy.value and self._position == Positions.Short:
+        if action == Actions.Short_sell.value and self._position == Positions.Short:
             if self.close_trade_profit[-1] > self.profit_aim * self.rr:
                 last_trade_price = self.add_sell_fee(self.prices.iloc[self._last_trade_tick].open)
                 current_price = self.add_buy_fee(self.prices.iloc[self._current_tick].open)

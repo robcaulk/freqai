@@ -185,7 +185,7 @@ class BaseReinforcementLearningModel(IFreqaiModel):
             res, _ = model.predict(observations, deterministic=True)
             return res
 
-        output = output.rolling(window=self.CONV_WIDTH).apply(_predict)
+        output = output[output.columns].rolling(window=self.CONV_WIDTH).apply(_predict)
 
         return output
 

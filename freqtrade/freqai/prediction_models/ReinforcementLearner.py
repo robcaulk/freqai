@@ -2,6 +2,8 @@ import logging
 from typing import Any, Dict  # , Tuple
 
 # import numpy.typing as npt
+from sb3_contrib  import TRPO, ARS
+from stable_baselines3 import PPO, A2C, DQN, TD3, SAC
 import torch as th
 import numpy as np
 from freqtrade.freqai.data_kitchen import FreqaiDataKitchen

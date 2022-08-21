@@ -5,6 +5,8 @@ from typing import Any, Dict  # , Tuple
 import torch as th
 from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.vec_env import SubprocVecEnv
+from sb3_contrib  import TRPO, ARS
+from stable_baselines3 import PPO, A2C, DQN, TD3, SAC
 from freqtrade.freqai.RL.BaseReinforcementLearningModel import (BaseReinforcementLearningModel,
                                                                 make_env)
 from freqtrade.freqai.data_kitchen import FreqaiDataKitchen

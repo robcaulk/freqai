@@ -122,6 +122,12 @@ Mandatory parameters are marked as **Required**, which means that they are requi
 |  |  **Extraneous parameters**
 | `model_save_type` | If your model makes use of Tensorflow Keras, use `keras`, or for `stable_baselines3` in `ReinforcementLearningModel`, use `zip`. Otherwise, for standard regressors like `Catboost` and `LightGBM`, use `joblib`. If not assigned, it reverts to default value `joblib`  <br> **Datatype:** str.
 | `conv_width` | The width of a convolutional neural network input tensor or the `ReinforcementLearningModel` `window_size`. This replaces the need for `shift` by feeding in historical data points as the second dimension of the tensor. Technically, this parameter can also be used for regressors, but it only adds computational overhead and does not change the model training/prediction. Default value, 2 <br> **Datatype:** integer.
+|  |  **Configuring Reinforcement Learning**
+| `rl_config` | A dictionary containing the parameters used to configure the training reinforcement learning model <br> **Datatype:** dictionary.
+| `train_cycles` | Used to calculate training timesteps `train_cycles * len(train_df)` <br> **Datatype:** integer.
+| `eval_cycles` | Used to calculate eval timesteps `eval_cycles * len(test_df)` default is 4 <br> **Datatype:** integer.
+| `model_type` | The model name from stable baselines 3 or stable baselines3 contrib. For example: `PPO`, `DQN`, ... <br> **Datatype:** strings.
+| `policy_type` | The policy name from stable baselines 3. For example: `MlpPolicy`, `MultiInputPolicy`, ... <br> **Datatype:** strings.
 
 ### Important FreqAI dataframe key patterns
 

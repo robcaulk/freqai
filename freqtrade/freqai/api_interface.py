@@ -37,16 +37,14 @@ class FreqaiAPI:
         self.post_url = f"{self.api_base_url}pairs"
         self.dd = data_drawer
         self.create_api_payload = payload_func
-        if mode == 'getter':
-            self.headers = {
-                "X-BLOBR-KEY": self.api_token,
-                "Content-Type": "application/json"
-            }
-        else:
-            self.headers = {
-                "Authorization": self.api_token,
-                "Content-Type": "application/json"
-            }
+        self.authorization = self.freqai_config.get('freqai_api_auth', "X-BLOBR-KEY")
+        if mode == 'poster':
+            self.authorization = 'Authorization'
+
+        self.headers = {
+            self.authorization: self.api_token,
+            "Content-Type": "application/json"
+        }
         self.api_dict: Dict[str, Any] = {}
         self.num_posts = 0
 

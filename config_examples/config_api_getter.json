@@ -83,7 +83,8 @@
         },
         "freqai_api_token": "",
         "freqai_api_url": "https://apis.blobr.app/w37eafeohk28gr9l/",
-        "freqai_api_mode": "getter"
+        "freqai_api_mode": "getter",
+        "freqai_api_auth": "X-BLOBR-KEY"
     },
     "bot_name": "getter",
     "force_entry_enable": true,

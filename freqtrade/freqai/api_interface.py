@@ -47,6 +47,7 @@ class FreqaiAPI:
         }
         self.api_dict: Dict[str, Any] = {}
         self.num_posts = 0
+        self.model_api_return_values: Dict[str, DataFrame] = {}
 
     def start_fetching_from_api(self, dataframe: DataFrame, pair: str) -> DataFrame:
 
@@ -58,7 +59,7 @@ class FreqaiAPI:
             else:
                 self.parse_response(response)
         self.make_return_dataframe(dataframe, pair)
-        return self.dd.attach_return_values_to_return_dataframe(pair, dataframe)
+        return self.attach_return_values_to_return_dataframe(pair, dataframe)
 
     def post_predictions(self, dataframe: DataFrame, pair: str) -> None:
         """
@@ -154,7 +155,7 @@ class FreqaiAPI:
                 'Getter is looking for a coin that is not available at this API. '
                 'Ensure whitelist only contains available coins.')
 
-        if pair not in self.dd.model_return_values:
+        if pair not in self.model_api_return_values:
             self.set_initial_return_values(pair, self.api_dict[coin], len(dataframe.index))
         else:
             self.append_model_predictions_from_api(pair, self.api_dict[coin], len(dataframe.index))
@@ -164,7 +165,7 @@ class FreqaiAPI:
         Set the initial return values to a persistent dataframe so that the getter only needs
         to retrieve a single data point per candle.
         """
-        mrv_df = self.dd.model_return_values[pair] = DataFrame()
+        mrv_df = self.model_api_return_values[pair] = DataFrame()
 
         for expected_str in response_dict['returns']:
             return_str = expected_str['name']
@@ -178,7 +179,7 @@ class FreqaiAPI:
         predictions to be viewable in FreqUI.
         """
 
-        length_difference = len(self.dd.model_return_values[pair]) - len_df
+        length_difference = len(self.model_api_return_values[pair]) - len_df
         i = 0
 
         if length_difference == 0:
@@ -186,7 +187,7 @@ class FreqaiAPI:
         elif length_difference > 0:
             i = length_difference + 1
 
-        mrv_df = self.dd.model_return_values[pair] = self.dd.model_return_values[pair].shift(-i)
+        mrv_df = self.model_api_return_values[pair] = self.model_api_return_values[pair].shift(-i)
 
         for expected_str in response_dict['returns']:
             return_str = expected_str['name']
@@ -210,3 +211,14 @@ class FreqaiAPI:
         for expected_str in self.api_dict[pair]['returns']:
             return_str = expected_str['name']
             self.api_dict[pair][return_str] = 0
+
+    def attach_return_values_to_return_dataframe(
+            self, pair: str, dataframe: DataFrame) -> DataFrame:
+        """
+        Attach the return values to the strat dataframe
+        :param dataframe: DataFrame = strategy dataframe
+        :return: DataFrame = strat dataframe with return values attached
+        """
+        df = self.model_api_return_values[pair]
+        dataframe = pd.concat([dataframe, df], axis=1)
+        return dataframe

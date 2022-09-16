@@ -142,15 +142,20 @@ class FreqtradeBot(LoggingMixin):
         :return: None
         """
         logger.info('Cleaning up modules ...')
+        try:
+            # Wrap db activities in shutdown to avoid problems if database is gone,
+            # and raises further exceptions.
+            if self.config['cancel_open_orders_on_exit']:
+                self.cancel_all_open_orders()
 
-        if self.config['cancel_open_orders_on_exit']:
-            self.cancel_all_open_orders()
+            self.check_for_open_trades()
 
-        self.check_for_open_trades()
+        finally:
+            self.strategy.ft_bot_cleanup()
 
-        self.rpc.cleanup()
-        Trade.commit()
-        self.exchange.close()
+            self.rpc.cleanup()
+            Trade.commit()
+            self.exchange.close()
 
     def startup(self) -> None:
         """
@@ -276,16 +281,17 @@ class FreqtradeBot(LoggingMixin):
     def update_funding_fees(self):
         if self.trading_mode == TradingMode.FUTURES:
             trades = Trade.get_open_trades()
-            for trade in trades:
-                funding_fees = self.exchange.get_funding_fees(
-                    pair=trade.pair,
-                    amount=trade.amount,
-                    is_short=trade.is_short,
-                    open_date=trade.open_date_utc
-                )
-                trade.funding_fees = funding_fees
-        else:
-            return 0.0
+            try:
+                for trade in trades:
+                    funding_fees = self.exchange.get_funding_fees(
+                        pair=trade.pair,
+                        amount=trade.amount,
+                        is_short=trade.is_short,
+                        open_date=trade.date_last_filled_utc
+                    )
+                    trade.funding_fees = funding_fees
+            except ExchangeError:
+                logger.warning("Could not update funding fees for open trades.")
 
     def startup_backpopulate_precision(self):
 
@@ -578,7 +584,9 @@ class FreqtradeBot(LoggingMixin):
 
         if stake_amount is not None and stake_amount < 0.0:
             # We should decrease our position
-            amount = abs(float(FtPrecise(stake_amount) / FtPrecise(current_exit_rate)))
+            amount = self.exchange.amount_to_contract_precision(
+                trade.pair,
+                abs(float(FtPrecise(stake_amount) / FtPrecise(current_exit_rate))))
             if amount > trade.amount:
                 # This is currently ineffective as remaining would become < min tradable
                 # Fixing this would require checking for 0.0 there -
@@ -587,9 +595,14 @@ class FreqtradeBot(LoggingMixin):
                     f"Adjusting amount to trade.amount as it is higher. {amount} > {trade.amount}")
                 amount = trade.amount
 
+            if amount == 0.0:
+                logger.info("Amount to sell is 0.0 due to exchange limits - not selling.")
+                return
+
             remaining = (trade.amount - amount) * current_exit_rate
             if remaining < min_exit_stake:
-                logger.info(f'Remaining amount of {remaining} would be too small.')
+                logger.info(f"Remaining amount of {remaining} would be smaller "
+                            f"than the minimum of {min_exit_stake}.")
                 return
 
             self.execute_trade_exit(trade, current_exit_rate, exit_check=ExitCheckTuple(
@@ -659,14 +672,12 @@ class FreqtradeBot(LoggingMixin):
         if not stake_amount:
             return False
 
-        if pos_adjust:
-            logger.info(f"Position adjust: about to create a new order for {pair} with stake: "
-                        f"{stake_amount} for {trade}")
-        else:
-            logger.info(
-                f"{name} signal found: about create a new trade for {pair} with stake_amount: "
-                f"{stake_amount} ...")
-
+        msg = (f"Position adjust: about to create a new order for {pair} with stake: "
+               f"{stake_amount} for {trade}" if pos_adjust
+               else
+               f"{name} signal found: about create a new trade for {pair} with stake_amount: "
+               f"{stake_amount} ...")
+        logger.info(msg)
         amount = (stake_amount / enter_limit_requested) * leverage
         order_type = ordertype or self.strategy.order_types['entry']
 
@@ -726,10 +737,16 @@ class FreqtradeBot(LoggingMixin):
         fee = self.exchange.get_fee(symbol=pair, taker_or_maker='maker')
         base_currency = self.exchange.get_pair_base_currency(pair)
         open_date = datetime.now(timezone.utc)
-        funding_fees = self.exchange.get_funding_fees(
-            pair=pair, amount=amount, is_short=is_short, open_date=open_date)
+
         # This is a new trade
         if trade is None:
+            funding_fees = 0.0
+            try:
+                funding_fees = self.exchange.get_funding_fees(
+                    pair=pair, amount=amount, is_short=is_short, open_date=open_date)
+            except ExchangeError:
+                logger.warning("Could not find funding fee.")
+
             trade = Trade(
                 pair=pair,
                 base_currency=base_currency,
@@ -906,7 +923,7 @@ class FreqtradeBot(LoggingMixin):
             'stake_amount': trade.stake_amount,
             'stake_currency': self.config['stake_currency'],
             'fiat_currency': self.config.get('fiat_display_currency', None),
-            'amount': order.safe_amount_after_fee,
+            'amount': order.safe_amount_after_fee if fill else order.amount,
             'open_date': trade.open_date or datetime.utcnow(),
             'current_rate': current_rate,
             'sub_trade': sub_trade,
@@ -1480,12 +1497,16 @@ class FreqtradeBot(LoggingMixin):
         :param exit_check: CheckTuple with signal and reason
         :return: True if it succeeds False
         """
-        trade.funding_fees = self.exchange.get_funding_fees(
-            pair=trade.pair,
-            amount=trade.amount,
-            is_short=trade.is_short,
-            open_date=trade.open_date_utc,
-        )
+        try:
+            trade.funding_fees = self.exchange.get_funding_fees(
+                pair=trade.pair,
+                amount=trade.amount,
+                is_short=trade.is_short,
+                open_date=trade.date_last_filled_utc,
+            )
+        except ExchangeError:
+            logger.warning("Could not update funding fee.")
+
         exit_type = 'exit'
         exit_reason = exit_tag or exit_check.exit_reason
         if exit_check.exit_type in (
@@ -1732,12 +1753,12 @@ class FreqtradeBot(LoggingMixin):
                 # TODO: Margin will need to use interest_rate as well.
                 # interest_rate = self.exchange.get_interest_rate()
                 trade.set_liquidation_price(self.exchange.get_liquidation_price(
-                    leverage=trade.leverage,
                     pair=trade.pair,
+                    open_rate=trade.open_rate,
+                    is_short=trade.is_short,
                     amount=trade.amount,
                     stake_amount=trade.stake_amount,
-                    open_rate=trade.open_rate,
-                    is_short=trade.is_short
+                    wallet_balance=trade.stake_amount,
                 ))
 
             # Updating wallets when order is closed
@@ -1778,7 +1799,7 @@ class FreqtradeBot(LoggingMixin):
             self.rpc.send_msg(msg)
 
     def apply_fee_conditional(self, trade: Trade, trade_base_currency: str,
-                              amount: float, fee_abs: float) -> float:
+                              amount: float, fee_abs: float, order_obj: Order) -> Optional[float]:
         """
         Applies the fee to amount (either from Order or from Trades).
         Can eat into dust if more than the required asset is available.
@@ -1786,40 +1807,42 @@ class FreqtradeBot(LoggingMixin):
         never in base currency.
         """
         self.wallets.update()
-        if fee_abs != 0 and self.wallets.get_free(trade_base_currency) >= amount:
+        amount_ = amount
+        if order_obj.ft_order_side == trade.exit_side or order_obj.ft_order_side == 'stoploss':
+            # check against remaining amount!
+            amount_ = trade.amount - amount
+
+        if fee_abs != 0 and self.wallets.get_free(trade_base_currency) >= amount_:
             # Eat into dust if we own more than base currency
             logger.info(f"Fee amount for {trade} was in base currency - "
                         f"Eating Fee {fee_abs} into dust.")
         elif fee_abs != 0:
-            real_amount = self.exchange.amount_to_precision(trade.pair, amount - fee_abs)
-            logger.info(f"Applying fee on amount for {trade} "
-                        f"(from {amount} to {real_amount}).")
-            return real_amount
-        return amount
+            logger.info(f"Applying fee on amount for {trade}, fee={fee_abs}.")
+            return fee_abs
+        return None
 
     def handle_order_fee(self, trade: Trade, order_obj: Order, order: Dict[str, Any]) -> None:
         # Try update amount (binance-fix)
         try:
-            new_amount = self.get_real_amount(trade, order, order_obj)
-            if not isclose(safe_value_fallback(order, 'filled', 'amount'), new_amount,
-                           abs_tol=constants.MATH_CLOSE_PREC):
-                order_obj.ft_fee_base = trade.amount - new_amount
+            fee_abs = self.get_real_amount(trade, order, order_obj)
+            if fee_abs is not None:
+                order_obj.ft_fee_base = fee_abs
         except DependencyException as exception:
             logger.warning("Could not update trade amount: %s", exception)
 
-    def get_real_amount(self, trade: Trade, order: Dict, order_obj: Order) -> float:
+    def get_real_amount(self, trade: Trade, order: Dict, order_obj: Order) -> Optional[float]:
         """
         Detect and update trade fee.
         Calls trade.update_fee() upon correct detection.
         Returns modified amount if the fee was taken from the destination currency.
         Necessary for exchanges which charge fees in base currency (e.g. binance)
-        :return: identical (or new) amount for the trade
+        :return: Absolute fee to apply for this order or None
         """
         # Init variables
         order_amount = safe_value_fallback(order, 'filled', 'amount')
         # Only run for closed orders
         if trade.fee_updated(order.get('side', '')) or order['status'] == 'open':
-            return order_amount
+            return None
 
         trade_base_currency = self.exchange.get_pair_base_currency(trade.pair)
         # use fee from order-dict if possible
@@ -1836,13 +1859,14 @@ class FreqtradeBot(LoggingMixin):
                 if trade_base_currency == fee_currency:
                     # Apply fee to amount
                     return self.apply_fee_conditional(trade, trade_base_currency,
-                                                      amount=order_amount, fee_abs=fee_cost)
-                return order_amount
+                                                      amount=order_amount, fee_abs=fee_cost,
+                                                      order_obj=order_obj)
+                return None
         return self.fee_detection_from_trades(
             trade, order, order_obj, order_amount, order.get('trades', []))
 
     def fee_detection_from_trades(self, trade: Trade, order: Dict, order_obj: Order,
-                                  order_amount: float, trades: List) -> float:
+                                  order_amount: float, trades: List) -> Optional[float]:
         """
         fee-detection fallback to Trades.
         Either uses provided trades list or the result of fetch_my_trades to get correct fee.
@@ -1853,7 +1877,7 @@ class FreqtradeBot(LoggingMixin):
 
         if len(trades) == 0:
             logger.info("Applying fee on amount for %s failed: myTrade-Dict empty found", trade)
-            return order_amount
+            return None
         fee_currency = None
         amount = 0
         fee_abs = 0.0
@@ -1895,10 +1919,9 @@ class FreqtradeBot(LoggingMixin):
             raise DependencyException("Half bought? Amounts don't match")
 
         if fee_abs != 0:
-            return self.apply_fee_conditional(trade, trade_base_currency,
-                                              amount=amount, fee_abs=fee_abs)
-        else:
-            return amount
+            return self.apply_fee_conditional(
+                trade, trade_base_currency, amount=amount, fee_abs=fee_abs, order_obj=order_obj)
+        return None
 
     def get_valid_price(self, custom_price: float, proposed_price: float) -> float:
         """

@@ -10,12 +10,13 @@ from typing import Dict, List, Optional, Tuple, Union
 import arrow
 from pandas import DataFrame
 
-from freqtrade.constants import ListPairsWithTimeframes
+from freqtrade.constants import Config, ListPairsWithTimeframes
 from freqtrade.data.dataprovider import DataProvider
 from freqtrade.enums import (CandleType, ExitCheckTuple, ExitType, RunMode, SignalDirection,
                              SignalTagType, SignalType, TradingMode)
 from freqtrade.exceptions import OperationalException, StrategyError
 from freqtrade.exchange import timeframe_to_minutes, timeframe_to_next_date, timeframe_to_seconds
+from freqtrade.misc import remove_entry_exit_signals
 from freqtrade.persistence import Order, PairLocks, Trade
 from freqtrade.strategy.hyper import HyperStrategyMixin
 from freqtrade.strategy.informative_decorator import (InformativeData, PopulateIndicators,
@@ -118,7 +119,7 @@ class IStrategy(ABC, HyperStrategyMixin):
     # Definition of plot_config. See plotting documentation for more details.
     plot_config: Dict = {}
 
-    def __init__(self, config: dict) -> None:
+    def __init__(self, config: Config) -> None:
         self.config = config
         # Dict to determine if analysis is necessary
         self._last_candle_seen_per_pair: Dict[str, datetime] = {}
@@ -613,6 +614,22 @@ class IStrategy(ABC, HyperStrategyMixin):
 # END - Intended to be overridden by strategy
 ###
 
+    def __informative_pairs_freqai(self) -> ListPairsWithTimeframes:
+        """
+        Create informative-pairs needed for FreqAI
+        """
+        if self.config.get('freqai', {}).get('enabled', False):
+            whitelist_pairs = self.dp.current_whitelist()
+            candle_type = self.config.get('candle_type_def', CandleType.SPOT)
+            corr_pairs = self.config["freqai"]["feature_parameters"]["include_corr_pairlist"]
+            informative_pairs = []
+            for tf in self.config["freqai"]["feature_parameters"]["include_timeframes"]:
+                for pair in set(whitelist_pairs + corr_pairs):
+                    informative_pairs.append((pair, tf, candle_type))
+            return informative_pairs
+
+        return []
+
     def gather_informative_pairs(self) -> ListPairsWithTimeframes:
         """
         Internal method which gathers all informative pairs (user or automatically defined).
@@ -637,6 +654,7 @@ class IStrategy(ABC, HyperStrategyMixin):
             else:
                 for pair in self.dp.current_whitelist():
                     informative_pairs.append((pair, inf_data.timeframe, candle_type))
+        informative_pairs.extend(self.__informative_pairs_freqai())
         return list(set(informative_pairs))
 
     def get_strategy_name(self) -> str:
@@ -725,20 +743,19 @@ class IStrategy(ABC, HyperStrategyMixin):
         # always run if process_only_new_candles is set to false
         if (not self.process_only_new_candles or
                 self._last_candle_seen_per_pair.get(pair, None) != dataframe.iloc[-1]['date']):
+
             # Defs that only make change on new candle data.
             dataframe = self.analyze_ticker(dataframe, metadata)
+
             self._last_candle_seen_per_pair[pair] = dataframe.iloc[-1]['date']
-            self.dp._set_cached_df(
-                pair, self.timeframe, dataframe,
-                candle_type=self.config.get('candle_type_def', CandleType.SPOT))
+
+            candle_type = self.config.get('candle_type_def', CandleType.SPOT)
+            self.dp._set_cached_df(pair, self.timeframe, dataframe, candle_type=candle_type)
+            self.dp._emit_df((pair, self.timeframe, candle_type), dataframe)
+
         else:
             logger.debug("Skipping TA Analysis for already analyzed candle")
-            dataframe[SignalType.ENTER_LONG.value] = 0
-            dataframe[SignalType.EXIT_LONG.value] = 0
-            dataframe[SignalType.ENTER_SHORT.value] = 0
-            dataframe[SignalType.EXIT_SHORT.value] = 0
-            dataframe[SignalTagType.ENTER_TAG.value] = None
-            dataframe[SignalTagType.EXIT_TAG.value] = None
+            dataframe = remove_entry_exit_signals(dataframe)
 
         logger.debug("Loop Analysis Launched")
 
